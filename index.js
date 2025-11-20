@@ -13,7 +13,7 @@ app.use(express.json());
 app.use(
   cors({
     origin: [
-      "http://localhost:3000",
+      "http://localhost:10000",
       "https://bytron-hack.com",
       "https://www.bytron-hack.com",
     ],
@@ -48,15 +48,15 @@ const tronWebMaster = new TronWeb({
 
 // ================= PRODUCT PRICES =================
 const productPrices = {
-  "mostbet-aviator-spribe": 1,
+  "mostbet-aviator-spribe": 100,
   "1xbet-crash": 100,
-  "1win-aviator": 1,
-  luckyjet: 1,
-  "apple-of-fortune": 1,
-  thimbles: 1,
-  "wild-west-gold": 1,
-  "higher-vs-lower": 1,
-  "dragons-gold": 1,
+  "1win-aviator": 100,
+  "luckyjet": 100,
+  "apple-of-fortune": 100,
+  "thimbles": 100,
+  "wild-west-gold": 100,
+  "higher-vs-lower": 100,
+  "dragons-gold": 100,
 };
 
 // ================= PRODUCT FILES =================
@@ -64,9 +64,9 @@ const productFiles = {
   "mostbet-aviator-spribe": "mostbet.zip",
   "1xbet-crash": "crash.zip",
   "1win-aviator": "aviator.zip",
-  luckyjet: "luckyjet.zip",
+  "luckyjet": "luckyjet.zip",
   "apple-of-fortune": "Apple.zip",
-  thimbles: "thimbles.zip",
+  "thimbles": "thimbles.zip",
   "wild-west-gold": "Wild.zip",
   "higher-vs-lower": "Higher.zip",
   "dragons-gold": "Dragons.zip",
