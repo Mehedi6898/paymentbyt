@@ -18,7 +18,7 @@ app.use(
       "https://www.bytron-hack.com",
     ],
     methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type"],
   })
 );
 
@@ -48,7 +48,7 @@ const tronWebMaster = new TronWeb({
   privateKey: TRON_PRIVATE_KEY,
 });
 
-// ================= PRODUCT PRICES =================
+// ================= PRODUCT PRICES (USD) =================
 const productPrices = {
   "mostbet-aviator-spribe": 1,
   "1xbet-crash": 100,
@@ -74,41 +74,33 @@ const productFiles = {
   "dragons-gold": "Dragons.zip",
 };
 
-// In-memory orders
+// ================= IN-MEMORY ORDERS =================
 const orders = {};
 
-// ================= TRX PRICE API (FIXED) =================
+// ================= LIVE TRX PRICE (NO 429) =================
 
-// cache + fallback to avoid 429 issues
-let lastTrxPrice = Number(process.env.FALLBACK_TRX_USD || 0.12);
-let lastPriceFetch = 0; // timestamp ms
+let lastTrxPrice = 0.12;
+let lastPriceFetch = 0;
 
 async function fetchTrxUsd() {
-  const now = Date.now();
-
-  // use cache if fetched in last 5min
-  if (now - lastPriceFetch < 5 * 60 * 1000 && lastTrxPrice) {
-    return lastTrxPrice;
-  }
-
   try {
-    const res = await axios.get(
-      "https://api.coingecko.com/api/v3/simple/price?ids=tron&vs_currencies=usd"
-    );
-    const price = res.data?.tron?.usd;
-    if (!price) throw new Error("No TRX price in response");
+    const res = await axios.get("https://apilist.tronscanapi.com/api/token?id=tron");
+    const price = res.data.data.usdPrice;
+
+    if (!price) throw new Error("Invalid price response");
 
     lastTrxPrice = Number(price);
-    lastPriceFetch = now;
+    lastPriceFetch = Date.now();
+    console.log("🔥 Live TRX Price:", lastTrxPrice);
     return lastTrxPrice;
+
   } catch (err) {
-    console.error("fetchTrxUsd error (using fallback):", err.message);
-    // use env fallback or last known value
-    return Number(process.env.FALLBACK_TRX_USD || lastTrxPrice || 0.12);
+    console.log("❌ TRONSCAN failed, using fallback:", err.message);
+    return lastTrxPrice;
   }
 }
 
-// ================= PRICE ROUTE =================
+// ================= PRICE CHECK ROUTE =================
 app.get("/price/:productId", (req, res) => {
   const id = req.params.productId.toLowerCase();
   const price = productPrices[id];
@@ -118,13 +110,15 @@ app.get("/price/:productId", (req, res) => {
   res.json({ product: id, price });
 });
 
-// ================= ORDER CREATE =================
+// ================= CREATE ORDER =================
 app.post("/create-order", async (req, res) => {
   try {
     const { productId } = req.body;
     const usdPrice = productPrices[productId];
+
     if (!usdPrice) return res.status(400).json({ error: "Invalid product" });
 
+    // get real-time trx price
     const trxUsd = await fetchTrxUsd();
     const requiredTrx = usdPrice / trxUsd;
     const requiredSun = Math.ceil(requiredTrx * 1e6);
@@ -151,6 +145,7 @@ app.post("/create-order", async (req, res) => {
       address: account.address.base58,
       requiredTrx: (requiredSun / 1e6).toFixed(2),
     });
+
   } catch (err) {
     console.error("create-order error:", err);
     res.status(500).json({ error: "Create order failed" });
@@ -179,9 +174,7 @@ app.get("/check-payment/:orderId", async (req, res) => {
     order.paid = true;
     order.paidAmountSun = tx.amount;
     order.paidTxId = tx.hash;
-    order.expiresAt = Date.now() + 30 * 60 * 1000; // 30 minutes
-
-    // you can add auto-forward here again if you want, I’m leaving it out to keep it stable
+    order.expiresAt = Date.now() + 30 * 60 * 1000;
 
     return res.json({ paid: true, expiresAt: order.expiresAt });
   } catch (err) {
@@ -190,43 +183,7 @@ app.get("/check-payment/:orderId", async (req, res) => {
   }
 });
 
-// ================= EMAIL CONFIRMATION =================
-app.post("/send-email", async (req, res) => {
-  const { orderId, email } = req.body;
-  const order = orders[orderId];
-
-  if (!order || !order.paid)
-    return res.status(403).json({ error: "Payment not verified" });
-
-  if (!email || !email.includes("@")) {
-    return res.status(400).json({ error: "Valid email required" });
-  }
-
-  order.email = email;
-
-  try {
-    await transporter.sendMail({
-      from: `"Bytron" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: "Payment Confirmed ✔",
-      html: `
-        <div style="padding:20px;font-family:Arial;background:#0c0c0c;color:white;border-radius:10px;">
-          <h1 style="color:#00eeff;">Payment Confirmed</h1>
-          <p>Your order is verified. Files are not sent via email.</p>
-          <p><b>Go back to the website and click Download Now. Or message @Bytron on Telegram.</b></p>
-        </div>
-      `,
-    });
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error("email error:", err.message);
-    // still return success so UX stays smooth
-    res.status(200).json({ success: true });
-  }
-});
-
-// ================= DOWNLOAD FILE =================
+// ================= DOWNLOAD =================
 app.get("/download/:orderId", (req, res) => {
   const order = orders[req.params.orderId];
   if (!order || !order.paid)
@@ -240,7 +197,7 @@ app.get("/download/:orderId", (req, res) => {
   res.download(filePath);
 });
 
-// ================= RUN =================
+// ================= RUN SERVER =================
 app.listen(PORT, () =>
-  console.log(`🔥 Server running http://localhost:${PORT}`)
+  console.log(`🔥 Server running on port ${PORT}`)
 );
