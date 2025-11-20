@@ -74,37 +74,35 @@ const productFiles = {
   "dragons-gold": "Dragons.zip",
 };
 
-// In-memory orders
+// ================= ORDERS =================
 const orders = {};
 
-// ================= TRX PRICE API (FIXED) =================
+// ================= TRX PRICE FIX (NO COINGECKO) =================
 
-// cache + fallback to avoid 429 issues
-let lastTrxPrice = Number(process.env.FALLBACK_TRX_USD || 0.12);
-let lastPriceFetch = 0; // timestamp ms
+let cachedPrice = 0.12;
+let lastFetchTime = 0;
 
 async function fetchTrxUsd() {
   const now = Date.now();
 
-  // use cache if fetched in last 5min
-  if (now - lastPriceFetch < 5 * 60 * 1000 && lastTrxPrice) {
-    return lastTrxPrice;
-  }
+  // Use cached price if fetched within 5 minutes
+  if (now - lastFetchTime < 5 * 60 * 1000) return cachedPrice;
 
   try {
-    const res = await axios.get(
-      "https://api.coingecko.com/api/v3/simple/price?ids=tron&vs_currencies=usd"
-    );
-    const price = res.data?.tron?.usd;
-    if (!price) throw new Error("No TRX price in response");
+    const res = await axios.get("https://api.trongrid.io/wallet/getnowblock");
+    const market = await axios.get("https://apilist.tronscanapi.com/api/market/price");
 
-    lastTrxPrice = Number(price);
-    lastPriceFetch = now;
-    return lastTrxPrice;
+    let price = market.data?.price || null;
+
+    if (!price) throw new Error("TRON API returned no price");
+
+    cachedPrice = Number(price);
+    lastFetchTime = now;
+
+    return cachedPrice;
   } catch (err) {
-    console.error("fetchTrxUsd error (using fallback):", err.message);
-    // use env fallback or last known value
-    return Number(process.env.FALLBACK_TRX_USD || lastTrxPrice || 0.12);
+    console.log("TRX Price API failed → using fallback:", err.message);
+    return cachedPrice; // never returns 0
   }
 }
 
@@ -181,8 +179,6 @@ app.get("/check-payment/:orderId", async (req, res) => {
     order.paidTxId = tx.hash;
     order.expiresAt = Date.now() + 30 * 60 * 1000; // 30 minutes
 
-    // you can add auto-forward here again if you want, I’m leaving it out to keep it stable
-
     return res.json({ paid: true, expiresAt: order.expiresAt });
   } catch (err) {
     console.error("check-payment error:", err);
@@ -190,47 +186,10 @@ app.get("/check-payment/:orderId", async (req, res) => {
   }
 });
 
-// ================= EMAIL CONFIRMATION =================
-app.post("/send-email", async (req, res) => {
-  const { orderId, email } = req.body;
-  const order = orders[orderId];
-
-  if (!order || !order.paid)
-    return res.status(403).json({ error: "Payment not verified" });
-
-  if (!email || !email.includes("@")) {
-    return res.status(400).json({ error: "Valid email required" });
-  }
-
-  order.email = email;
-
-  try {
-    await transporter.sendMail({
-      from: `"Bytron" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: "Payment Confirmed ✔",
-      html: `
-        <div style="padding:20px;font-family:Arial;background:#0c0c0c;color:white;border-radius:10px;">
-          <h1 style="color:#00eeff;">Payment Confirmed</h1>
-          <p>Your order is verified. Files are not sent via email.</p>
-          <p><b>Go back to the website and click Download Now. Or message @Bytron on Telegram.</b></p>
-        </div>
-      `,
-    });
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error("email error:", err.message);
-    // still return success so UX stays smooth
-    res.status(200).json({ success: true });
-  }
-});
-
 // ================= DOWNLOAD FILE =================
 app.get("/download/:orderId", (req, res) => {
   const order = orders[req.params.orderId];
-  if (!order || !order.paid)
-    return res.status(403).send("Payment not verified");
+  if (!order || !order.paid) return res.status(403).send("Payment not verified");
   if (Date.now() > order.expiresAt) return res.status(403).send("Link expired");
 
   const fileName = productFiles[order.productId];
@@ -240,7 +199,7 @@ app.get("/download/:orderId", (req, res) => {
   res.download(filePath);
 });
 
-// ================= RUN =================
+// ================= RUN SERVER =================
 app.listen(PORT, () =>
   console.log(`🔥 Server running http://localhost:${PORT}`)
 );
