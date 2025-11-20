@@ -48,15 +48,15 @@ const tronWebMaster = new TronWeb({
 
 // ================= PRODUCT PRICES =================
 const productPrices = {
-  "mostbet-aviator-spribe": 100,
-  "1xbet-crash": 100,
-  "1win-aviator": 100,
-  "luckyjet": 100,
-  "apple-of-fortune": 100,
-  "thimbles": 100,
-  "wild-west-gold": 100,
-  "higher-vs-lower": 100,
-  "dragons-gold": 100,
+  "mostbet-aviator-spribe": 1,
+  "1xbet-crash": 1,
+  "1win-aviator": 1,
+  "luckyjet": 1,
+  "apple-of-fortune": 1,
+  "thimbles": 1,
+  "wild-west-gold": 1,
+  "higher-vs-lower": 1,
+  "dragons-gold": 1,
 };
 
 // ================= PRODUCT FILES =================
