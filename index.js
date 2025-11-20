@@ -140,3 +140,51 @@ app.post("/create-order", async (req, res) => {
 
 // ================= CHECK PAYMENT =================
 // (unchanged)
+
+
+// ================= CHECK PAYMENT =================
+app.get("/check-payment/:orderId", async (req, res) => {
+  const order = orders[req.params.orderId];
+  if (!order) return res.json({ paid: false });
+
+  try {
+    const url = `https://apilist.tronscanapi.com/api/transaction?address=${order.depositAddress}&limit=50`;
+    const response = await axios.get(url);
+    const txs = response.data.data || [];
+
+    const tx = txs.find(
+      (t) =>
+        t.toAddress === order.depositAddress &&
+        t.amount >= order.requiredSun &&
+        t.contractRet === "SUCCESS"
+    );
+
+    if (!tx) return res.json({ paid: false });
+
+    order.paid = true;
+    order.paidAmountSun = tx.amount;
+    order.paidTxId = tx.hash;
+    order.expiresAt = Date.now() + 30 * 60 * 1000; // 30 mins valid
+
+    return res.json({ paid: true, expiresAt: order.expiresAt });
+  } catch (err) {
+    console.error("check-payment error:", err);
+    res.status(500).json({ error: "Payment check failed" });
+  }
+});
+
+// ================= DOWNLOAD =================
+app.get("/download/:orderId", (req, res) => {
+  const order = orders[req.params.orderId];
+  if (!order || !order.paid) return res.status(403).send("Payment not verified");
+  if (Date.now() > order.expiresAt) return res.status(403).send("Link expired");
+
+  const fileName = productFiles[order.productId];
+  if (!fileName) return res.status(500).send("File missing");
+
+  const filePath = path.join(__dirname, "files", fileName);
+  res.download(filePath);
+});
+
+// ================= RUN =================
+app.listen(PORT, () => console.log(`🔥 Server running http://localhost:${PORT}`));
